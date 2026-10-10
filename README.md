@@ -38,24 +38,24 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 ├── passing-parameters-between-snowflake-notebooks.md   Medium article
 ├── challenge-box.png                                    Article image
 │
-├── scenario-1-run/
+├── demo-scenario-1/
 │   ├── main_orchestrator.ipynb     Calls both notebooks with %run
 │   ├── data_prep.ipynb             Creates raw data + summary table
 │   └── report.ipynb                Reads summary, generates report
 │
-├── scenario-2-task-dag/
+├── demo-scenario-2/
 │   ├── data_prep.ipynb             Standalone NPO, sets return value
 │   ├── report.ipynb                Standalone NPO, parses sys.argv
 │   └── task_dag_setup.sql          Root + child task wiring
 │
-├── scenario-3-multi-predecessor/
+├── demo-scenario-3/
 │   ├── data_prep.ipynb
 │   ├── enrichment.ipynb
 │   ├── validation.ipynb
 │   ├── report.ipynb                Receives values from all 3 parents
 │   └── multi_predecessor_dag.sql
 │
-└── scenario-4-reusable-npo/
+└── demo-scenario-4/
     ├── report.ipynb                Generic report driven by arguments
     └── reusable_npo_dag.sql        Sales DAG + Marketing DAG + CONFIG variant
 ```
@@ -108,14 +108,14 @@ Before you run anything, search and replace these values in the notebooks and `.
 
 ## Scenario 1: `%run` (Shared Namespace)
 
-1. Upload all three notebooks from `scenario-1-run/` into the **same folder**.
+1. Upload all three notebooks from `demo-scenario-1/` into the **same folder**.
 2. Open `main_orchestrator.ipynb` and click **Run All**.
 3. Variables defined in `data_prep.ipynb` (such as `OUTPUT_TABLE` and `RUN_DATE`) are now available in `report.ipynb`.
 4. To schedule it: deploy `main_orchestrator.ipynb` as an NPO (**Calendar icon → Create schedule / Deploy**).
 
 ## Scenario 2: Task DAG with Separate NPOs
 
-1. Upload `data_prep.ipynb` and `report.ipynb` from `scenario-2-task-dag/`.
+1. Upload `data_prep.ipynb` and `report.ipynb` from `demo-scenario-2/`.
 2. **Run each one interactively** to confirm it works. The code detects interactive mode and skips `SYSTEM$SET_RETURN_VALUE`.
 3. **Deploy each notebook as its own NPO**: open the notebook → **Calendar icon → Deploy**. Write down the generated NPO name (`CODE_BUNDLE_xxxxxxxx`):
    ```sql
@@ -130,14 +130,14 @@ Before you run anything, search and replace these values in the notebooks and `.
 
 ## Scenario 3: Multiple Predecessors (Fan-in)
 
-1. Upload all four notebooks from `scenario-3-multi-predecessor/`.
+1. Upload all four notebooks from `demo-scenario-3/`.
 2. Deploy **each** one as a separate NPO.
 3. Update the NPO names in `multi_predecessor_dag.sql` and run it.
 4. Trigger the root task(s) as shown in the SQL file and confirm the report task gets all three values.
 
 ## Scenario 4: Reusable NPO Across DAGs
 
-1. Deploy `scenario-4-reusable-npo/report.ipynb` once as an NPO (you can also reuse the Scenario 2 report NPO).
+1. Deploy `demo-scenario-4/report.ipynb` once as an NPO (you can also reuse the Scenario 2 report NPO).
 2. Run `reusable_npo_dag.sql`. It creates a Sales DAG, a Marketing DAG, and a Task `CONFIG` variant that all call the **same** NPO with different arguments.
 3. Trigger each DAG on its own and compare the outputs.
 

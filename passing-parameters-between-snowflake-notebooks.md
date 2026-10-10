@@ -68,7 +68,7 @@ report_df = session.sql(f"SELECT * FROM {OUTPUT_TABLE}")
 **Pros:** Full variable sharing (DataFrames, objects, anything). No serialization.
 **Cons:** All notebooks must be in one NPO. Single point of failure.
 
-> Full notebook code: [GitHub repo / scenario-1-run](https://github.com/YOUR_REPO/snowflake-notebook-parameter-passing/tree/main/scenario-1-run)
+> Full notebook code: [GitHub repo / demo-scenario-1](https://github.com/YOUR_REPO/snowflake-notebook-parameter-passing/tree/main/demo-scenario-1)
 
 ---
 
@@ -149,7 +149,7 @@ END;
 ALTER TASK nightly_run SET CONFIG = $${"run_date": "2026-10-31", "target_db": "STAGING_DB"}$$;
 ```
 
-> Full notebook + SQL code: [GitHub repo / scenario-2-task-dag](https://github.com/YOUR_REPO/snowflake-notebook-parameter-passing/tree/main/scenario-2-task-dag)
+> Full notebook + SQL code: [GitHub repo / demo-scenario-2](https://github.com/YOUR_REPO/snowflake-notebook-parameter-passing/tree/main/demo-scenario-2)
 
 ---
 
