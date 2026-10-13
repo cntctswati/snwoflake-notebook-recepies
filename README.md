@@ -2,7 +2,7 @@
 
 Working examples for the Medium article **"Passing Parameters Between Snowflake Notebooks: A Complete Guide"**.
 
-They show four ways to chain Snowflake Workspace notebooks and pass values between them. The approaches run from the simple `%run` magic to production Task DAGs built on Code Bundles (formerly Notebook Project Objects/Code Bundles).
+They show four ways to chain Snowflake Workspace notebooks and pass values between them. The approaches run from the simple `%run` magic to production Task DAGs built on Code Bundles (formerly Notebook Project Objects/NPOs).
 
 ---
 
