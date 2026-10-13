@@ -1,3 +1,5 @@
 .DS_Store
 .ipynb_checkpoints/
 __pycache__/
+passing-parameters-between-snowflake-notebooks.md
+challenge-box.png
