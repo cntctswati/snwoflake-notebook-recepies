@@ -2,7 +2,7 @@
 
 Working examples for the Medium article **"Passing Parameters Between Snowflake Notebooks: A Complete Guide"**.
 
-They show four ways to chain Snowflake Workspace notebooks and pass values between them. The approaches run from the simple `%run` magic to production Task DAGs built on Notebook Project Objects (NPOs).
+They show four ways to chain Snowflake Workspace notebooks and pass values between them. The approaches run from the simple `%run` magic to production Task DAGs built on Code Bundles (formerly Notebook Project Objects/Code Bundles).
 
 ---
 
@@ -15,7 +15,7 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 > - **Review, test, and validate** everything in a non-production environment before you use it.
 > - **Scale and harden** the solution for your workload: error handling, retries, monitoring/alerting, cost controls, and data volumes.
 > - Some behavior described here (for example, the internal `_active_sessions` fallback and how `sys.argv` is handled in headless runs) was observed on a specific runtime version (`V2.4-CPU-PY3.12`). It **may change** in future Snowflake releases.
-> - The database, schema, warehouse, compute pool, and NPO names are placeholders. Replace them with your own.
+> - The database, schema, warehouse, compute pool, and Code Bundle names are placeholders. Replace them with your own.
 >
 > You are responsible for anything you deploy from this repo.
 
@@ -26,9 +26,9 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 | # | Scenario | How parameters flow | Best for |
 |---|----------|---------------------|----------|
 | 1 | `%run` | Shared Python namespace (variables) | Notebooks in the same project, simple orchestration |
-| 2 | Task DAG | `SYSTEM$SET_RETURN_VALUE` → `SYSTEM$GET_PREDECESSOR_RETURN_VALUE` → `ARGUMENTS` → `sys.argv` | Separate NPOs, production scheduling |
+| 2 | Task DAG | `SYSTEM$SET_RETURN_VALUE` → `SYSTEM$GET_PREDECESSOR_RETURN_VALUE` → `ARGUMENTS` → `sys.argv` | Separate Code Bundles, production scheduling |
 | 3 | Multiple predecessors | Child task reads return values from several parents | Fan-in pipelines |
-| 4 | Reusable NPO | Same NPO, different arguments per DAG (or Task `CONFIG`) | One notebook shared by many pipelines |
+| 4 | Reusable Code Bundle | Same Code Bundle, different arguments per DAG (or Task `CONFIG`) | One notebook shared by many pipelines |
 
 ## Repo Structure
 
@@ -44,8 +44,8 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 │   └── report.ipynb                Reads summary, generates report
 │
 ├── demo-scenario-2/
-│   ├── data_prep.ipynb             Standalone NPO, sets return value
-│   ├── report.ipynb                Standalone NPO, parses sys.argv
+│   ├── data_prep.ipynb             Standalone Code Bundle, sets return value
+│   ├── report.ipynb                Standalone Code Bundle, parses sys.argv
 │   └── task_dag_setup.sql          Root + child task wiring
 │
 ├── demo-scenario-3/
@@ -57,7 +57,7 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 │
 └── demo-scenario-4/
     ├── report.ipynb                Generic report driven by arguments
-    └── reusable_npo_dag.sql        Sales DAG + Marketing DAG + CONFIG variant
+    └── reusable_code_bundle_dag.sql        Sales DAG + Marketing DAG + CONFIG variant
 ```
 
 ## Prerequisites
@@ -65,14 +65,14 @@ They show four ways to chain Snowflake Workspace notebooks and pass values betwe
 - A Snowflake account with **Workspaces** and **Notebooks on Container Runtime** enabled
 - A **compute pool**, for example `SYSTEM_COMPUTE_POOL_CPU`
 - A **warehouse**, for example `COMPUTE_WH`
-- A target **database and schema**. The samples use `AGENTHIVE_LINEAGE.NPO_DEMO`; replace it with yours.
+- A target **database and schema**. The samples use `AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO`; replace it with yours.
 - A role with the privileges below. Use a dedicated least-privilege role, not `ACCOUNTADMIN`:
 
 ```sql
 -- Example only: adapt to your RBAC model
 CREATE ROLE IF NOT EXISTS NOTEBOOK_PIPELINE_ROLE;
 GRANT USAGE ON DATABASE <your_db> TO ROLE NOTEBOOK_PIPELINE_ROLE;
-GRANT USAGE, CREATE TABLE, CREATE TASK, CREATE NOTEBOOK PROJECT
+GRANT USAGE, CREATE TABLE, CREATE TASK, CREATE NOTEBOOK PROJECT  -- legacy grammar for Code Bundles
   ON SCHEMA <your_db>.<your_schema> TO ROLE NOTEBOOK_PIPELINE_ROLE;
 GRANT USAGE ON WAREHOUSE <your_wh> TO ROLE NOTEBOOK_PIPELINE_ROLE;
 GRANT USAGE ON COMPUTE POOL <your_pool> TO ROLE NOTEBOOK_PIPELINE_ROLE;
@@ -86,17 +86,17 @@ Before you run anything, search and replace these values in the notebooks and `.
 | Placeholder in code | Replace with |
 |---------------------|--------------|
 | `AGENTHIVE_LINEAGE` | Your database |
-| `NPO_DEMO` | Your schema |
+| `CODE_BUNDLE_DEMO` | Your schema |
 | `COMPUTE_WH` | Your warehouse |
 | `SYSTEM_COMPUTE_POOL_CPU` | Your compute pool |
-| `CODE_BUNDLE_xxxxxxxx` | The NPO name Snowflake generates when you deploy (see Step 3 below) |
-| `npo_demo/<notebook>.ipynb` | The notebook's path relative to your workspace root (the `ENTRYPOINT`) |
+| `CODE_BUNDLE_xxxxxxxx` | The Code Bundle name Snowflake generates when you deploy (see Step 3 below) |
+| `code_bundle_demo/<notebook>.ipynb` | The notebook's path relative to your workspace root (the `ENTRYPOINT`) |
 
 ## Getting the Files into Snowflake
 
 **Option A: Upload (Private/Shared workspace)**
 1. In Snowsight, go to **Projects → Workspaces** and open your workspace.
-2. Create a folder, for example `npo_demo`, then use **+ → Upload Files** to upload the scenario notebooks.
+2. Create a folder, for example `code_bundle_demo`, then use **+ → Upload Files** to upload the scenario notebooks.
 
 **Option B: Git-integrated workspace**
 1. Go to **Projects → Workspaces → From Git repository** and connect this repo (or your fork).
@@ -111,41 +111,41 @@ Before you run anything, search and replace these values in the notebooks and `.
 1. Upload all three notebooks from `demo-scenario-1/` into the **same folder**.
 2. Open `main_orchestrator.ipynb` and click **Run All**.
 3. Variables defined in `data_prep.ipynb` (such as `OUTPUT_TABLE` and `RUN_DATE`) are now available in `report.ipynb`.
-4. To schedule it: deploy `main_orchestrator.ipynb` as an NPO (**Calendar icon → Create schedule / Deploy**).
+4. To schedule it: deploy `main_orchestrator.ipynb` as a Code Bundle (**Calendar icon → Create schedule / Deploy**).
 
-## Scenario 2: Task DAG with Separate NPOs
+## Scenario 2: Task DAG with Separate Code Bundles
 
 1. Upload `data_prep.ipynb` and `report.ipynb` from `demo-scenario-2/`.
 2. **Run each one interactively** to confirm it works. The code detects interactive mode and skips `SYSTEM$SET_RETURN_VALUE`.
-3. **Deploy each notebook as its own NPO**: open the notebook → **Calendar icon → Deploy**. Write down the generated NPO name (`CODE_BUNDLE_xxxxxxxx`):
+3. **Deploy each notebook as its own Code Bundle**: open the notebook → **Calendar icon → Deploy**. Write down the generated Code Bundle name (`CODE_BUNDLE_xxxxxxxx`):
    ```sql
    SHOW NOTEBOOK PROJECTS IN SCHEMA <your_db>.<your_schema>;
    ```
-4. Update `task_dag_setup.sql` with your NPO names, entrypoints, warehouse, and pool, then run it in a SQL worksheet.
+4. Update `task_dag_setup.sql` with your Code Bundle names, entrypoints, warehouse, and pool, then run it in a SQL worksheet.
 5. Test the DAG:
    ```sql
-   EXECUTE TASK <your_db>.<your_schema>.DATA_PREP_NPO;
+   EXECUTE TASK <your_db>.<your_schema>.DATA_PREP_BUNDLE;
    ```
-6. Check the result in **Monitoring → Task History**, or with the monitoring queries below. `DATA_PREP_NPO` should show a `RETURN_VALUE` like `DB.SCHEMA.ORDER_SUMMARY|5|2026-09-30|SUCCESS`.
+6. Check the result in **Monitoring → Task History**, or with the monitoring queries below. `DATA_PREP_BUNDLE` should show a `RETURN_VALUE` like `DB.SCHEMA.ORDER_SUMMARY|5|2026-09-30|SUCCESS`.
 
 ## Scenario 3: Multiple Predecessors (Fan-in)
 
 1. Upload all four notebooks from `demo-scenario-3/`.
-2. Deploy **each** one as a separate NPO.
-3. Update the NPO names in `multi_predecessor_dag.sql` and run it.
+2. Deploy **each** one as a separate Code Bundle.
+3. Update the Code Bundle names in `multi_predecessor_dag.sql` and run it.
 4. Trigger the root task(s) as shown in the SQL file and confirm the report task gets all three values.
 
-## Scenario 4: Reusable NPO Across DAGs
+## Scenario 4: Reusable Code Bundle Across DAGs
 
-1. Deploy `demo-scenario-4/report.ipynb` once as an NPO (you can also reuse the Scenario 2 report NPO).
-2. Run `reusable_npo_dag.sql`. It creates a Sales DAG, a Marketing DAG, and a Task `CONFIG` variant that all call the **same** NPO with different arguments.
+1. Deploy `demo-scenario-4/report.ipynb` once as a Code Bundle (you can also reuse the Scenario 2 report Code Bundle).
+2. Run `reusable_code_bundle_dag.sql`. It creates a Sales DAG, a Marketing DAG, and a Task `CONFIG` variant that all call the **same** Code Bundle with different arguments.
 3. Trigger each DAG on its own and compare the outputs.
 
 ---
 
 ## Important: Redeploy After Every Edit
 
-Editing a notebook in the workspace **does not** update the deployed NPO. After every change:
+Editing a notebook in the workspace **does not** update the deployed Code Bundle. After every change:
 **Open the notebook → Calendar icon → Deploy Changes**, then re-run the task.
 
 ## Key Gotchas
@@ -170,9 +170,9 @@ FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
 WHERE schema_name = '<YOUR_SCHEMA>'
 ORDER BY scheduled_time DESC;
 
--- Deployed NPOs and their versions
+-- Deployed Code Bundles and their versions
 SHOW NOTEBOOK PROJECTS IN SCHEMA <your_db>.<your_schema>;
-SHOW VERSIONS IN NOTEBOOK PROJECT <your_db>.<your_schema>.<your_npo>;
+SHOW VERSIONS IN NOTEBOOK PROJECT <your_db>.<your_schema>.<your_code_bundle>;
 
 -- Trigger manually
 EXECUTE TASK <your_db>.<your_schema>.<root_task>;
@@ -181,10 +181,10 @@ EXECUTE TASK <your_db>.<your_schema>.<root_task>;
 ## Cleanup
 
 ```sql
-ALTER TASK <your_db>.<your_schema>.DATA_PREP_NPO SUSPEND;
-DROP TASK IF EXISTS <your_db>.<your_schema>.REPORT_NPO;
-DROP TASK IF EXISTS <your_db>.<your_schema>.DATA_PREP_NPO;
--- Drop the demo tables and NPOs if you no longer need them
+ALTER TASK <your_db>.<your_schema>.DATA_PREP_BUNDLE SUSPEND;
+DROP TASK IF EXISTS <your_db>.<your_schema>.REPORT_BUNDLE;
+DROP TASK IF EXISTS <your_db>.<your_schema>.DATA_PREP_BUNDLE;
+-- Drop the demo tables and Code Bundles if you no longer need them
 DROP SCHEMA IF EXISTS <your_db>.<your_schema>;   -- only if the schema was created just for this demo
 ```
 

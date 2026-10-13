@@ -1,17 +1,17 @@
 -- ============================================================
--- Two Separate NPOs + Task DAG with Parameter Passing
+-- Two Separate Code Bundles + Task DAG with Parameter Passing
 -- ============================================================
 -- 
 -- Architecture:
 --
 --   TASK_DATA_PREP (root, scheduled)
---       │  Runs data_prep.ipynb NPO
+--       │  Runs data_prep.ipynb Code Bundle
 --       │  Calls SYSTEM$SET_RETURN_VALUE(json_payload)
 --       │
 --       ▼
 --   TASK_REPORT (child, AFTER root)
 --       │  Reads SYSTEM$GET_PREDECESSOR_RETURN_VALUE('TASK_DATA_PREP')
---       │  Passes JSON as ARGUMENTS to report.ipynb NPO
+--       │  Passes JSON as ARGUMENTS to report.ipynb Code Bundle
 --       │  report.ipynb parses JSON via sys.argv[1]
 --
 -- Parameter flow:
@@ -20,35 +20,36 @@
 -- ============================================================
 
 USE DATABASE AGENTHIVE_LINEAGE;
-USE SCHEMA NPO_DEMO;
+USE SCHEMA CODE_BUNDLE_DEMO;
 
 -- ============================================================
 -- Step 1: Create internal stage for notebook files
 -- ============================================================
-CREATE STAGE IF NOT EXISTS AGENTHIVE_LINEAGE.NPO_DEMO.NOTEBOOK_STAGE;
+CREATE STAGE IF NOT EXISTS AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.NOTEBOOK_STAGE;
 
 -- Upload notebooks from local (run in SnowSQL or snow CLI):
--- PUT file:///Users/swatigoel/Providence\ Notebook/npo_demo/data_prep.ipynb @AGENTHIVE_LINEAGE.NPO_DEMO.NOTEBOOK_STAGE/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
--- PUT file:///Users/swatigoel/Providence\ Notebook/npo_demo/report.ipynb @AGENTHIVE_LINEAGE.NPO_DEMO.NOTEBOOK_STAGE/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+-- PUT file:///Users/swatigoel/Providence\ Notebook/code_bundle_demo/data_prep.ipynb @AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.NOTEBOOK_STAGE/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+-- PUT file:///Users/swatigoel/Providence\ Notebook/code_bundle_demo/report.ipynb @AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.NOTEBOOK_STAGE/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
 
 -- OR if notebooks are already in a Workspace, skip the stage and 
--- create the NPO using the Schedule button in Snowsight.
+-- create the Code Bundle using the Schedule button in Snowsight.
 
 -- ============================================================
--- Step 2: Create separate NPO for each notebook
+-- Step 2: Create separate Code Bundle for each notebook
 -- ============================================================
 
--- NPO 1: Data Preparation
-CREATE OR REPLACE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.NPO_DEMO.DATA_PREP_NPO
-  FROM '@AGENTHIVE_LINEAGE.NPO_DEMO.NOTEBOOK_STAGE/'
+-- Code Bundle 1: Data Preparation
+-- Note: CREATE/SHOW/DROP still use the legacy NOTEBOOK PROJECT grammar for Code Bundles.
+CREATE OR REPLACE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.DATA_PREP_BUNDLE
+  FROM '@AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.NOTEBOOK_STAGE/'
   MAIN_FILE = 'data_prep.ipynb'
   QUERY_WAREHOUSE = 'COMPUTE_WH'
   COMPUTE_POOL = 'SYSTEM_COMPUTE_POOL_CPU'       -- Replace with your compute pool
   RUNTIME = 'V2.2-CPU-PY3.11';           -- Replace with your runtime version
 
--- NPO 2: Report Generator
-CREATE OR REPLACE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.NPO_DEMO.REPORT_NPO
-  FROM '@AGENTHIVE_LINEAGE.NPO_DEMO.NOTEBOOK_STAGE/'
+-- Code Bundle 2: Report Generator
+CREATE OR REPLACE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.REPORT_BUNDLE
+  FROM '@AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.NOTEBOOK_STAGE/'
   MAIN_FILE = 'report.ipynb'
   QUERY_WAREHOUSE = 'COMPUTE_WH'
   COMPUTE_POOL = 'SYSTEM_COMPUTE_POOL_CPU'       -- Replace with your compute pool
@@ -62,12 +63,12 @@ CREATE OR REPLACE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.NPO_DEMO.REPORT_NPO
 -- ROOT TASK: Runs data_prep.ipynb
 -- Passes RUN_DATE and TARGET_DB as ARGUMENTS
 -- data_prep.ipynb calls SYSTEM$SET_RETURN_VALUE(json) at the end
-CREATE OR REPLACE TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP
+CREATE OR REPLACE TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP
   WAREHOUSE = 'COMPUTE_WH'
   SCHEDULE = 'USING CRON 0 8 * * 1 America/Los_Angeles'  -- Every Monday 8am
 AS
 BEGIN
-  EXECUTE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.NPO_DEMO.DATA_PREP_NPO
+  EXECUTE CODE BUNDLE AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.DATA_PREP_BUNDLE
     MAIN_FILE = 'data_prep.ipynb'
     COMPUTE_POOL = 'SYSTEM_COMPUTE_POOL_CPU'
     QUERY_WAREHOUSE = 'COMPUTE_WH'
@@ -81,19 +82,19 @@ END;
 -- CHILD TASK: Runs report.ipynb AFTER data_prep completes
 -- Reads the JSON return value from TASK_DATA_PREP
 -- Passes it as ARGUMENTS to report.ipynb
-CREATE OR REPLACE TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_REPORT
+CREATE OR REPLACE TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_REPORT
   WAREHOUSE = 'COMPUTE_WH'
-  AFTER AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP
+  AFTER AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP
 AS
 BEGIN
   -- Read the JSON payload set by data_prep.ipynb via SYSTEM$SET_RETURN_VALUE
   LET predecessor_output VARCHAR := SYSTEM$GET_PREDECESSOR_RETURN_VALUE(
-    'AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP'
+    'AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP'
   );
 
   -- Pass the entire JSON string as a single argument to report.ipynb
   -- report.ipynb parses it with: json.loads(sys.argv[1])
-  EXECUTE NOTEBOOK PROJECT AGENTHIVE_LINEAGE.NPO_DEMO.REPORT_NPO
+  EXECUTE CODE BUNDLE AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.REPORT_BUNDLE
     MAIN_FILE = 'report.ipynb'
     COMPUTE_POOL = 'SYSTEM_COMPUTE_POOL_CPU'
     QUERY_WAREHOUSE = 'COMPUTE_WH'
@@ -107,14 +108,14 @@ END;
 -- Step 4: Activate the DAG
 -- ============================================================
 -- IMPORTANT: Resume child task FIRST, then root task
-ALTER TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_REPORT RESUME;
-ALTER TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP RESUME;
+ALTER TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_REPORT RESUME;
+ALTER TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP RESUME;
 
 
 -- ============================================================
 -- Manual Test: Run the DAG immediately (without waiting for CRON)
 -- ============================================================
--- EXECUTE TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP;
+-- EXECUTE TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP;
 
 
 -- ============================================================
@@ -132,9 +133,9 @@ ALTER TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP RESUME;
 -- ============================================================
 -- Cleanup (if needed)
 -- ============================================================
--- ALTER TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP SUSPEND;
--- ALTER TASK AGENTHIVE_LINEAGE.NPO_DEMO.TASK_REPORT SUSPEND;
--- DROP TASK IF EXISTS AGENTHIVE_LINEAGE.NPO_DEMO.TASK_REPORT;
--- DROP TASK IF EXISTS AGENTHIVE_LINEAGE.NPO_DEMO.TASK_DATA_PREP;
--- DROP NOTEBOOK PROJECT IF EXISTS AGENTHIVE_LINEAGE.NPO_DEMO.DATA_PREP_NPO;
--- DROP NOTEBOOK PROJECT IF EXISTS AGENTHIVE_LINEAGE.NPO_DEMO.REPORT_NPO;
+-- ALTER TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP SUSPEND;
+-- ALTER TASK AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_REPORT SUSPEND;
+-- DROP TASK IF EXISTS AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_REPORT;
+-- DROP TASK IF EXISTS AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.TASK_DATA_PREP;
+-- DROP NOTEBOOK PROJECT IF EXISTS AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.DATA_PREP_BUNDLE;
+-- DROP NOTEBOOK PROJECT IF EXISTS AGENTHIVE_LINEAGE.CODE_BUNDLE_DEMO.REPORT_BUNDLE;
